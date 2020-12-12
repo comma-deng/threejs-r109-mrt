@@ -252,6 +252,11 @@ function WebGLRenderer( parameters ) {
 
 	var utils;
 
+	var DrawBuffersEXT;
+	var defaultAttachments;
+	var defaultBackAttachment;
+
+
 	function initGLContext() {
 
 		extensions = new WebGLExtensions( _gl );
@@ -271,6 +276,8 @@ function WebGLRenderer( parameters ) {
 		}
 
 		extensions.get( 'OES_texture_float_linear' );
+		DrawBuffersEXT = extensions.get( 'WEBGL_draw_buffers' );
+
 		
 
 		utils = new WebGLUtils( _gl, extensions, capabilities );
@@ -295,6 +302,9 @@ function WebGLRenderer( parameters ) {
 		bufferRenderer = new WebGLBufferRenderer( _gl, extensions, info, capabilities );
 		indexedBufferRenderer = new WebGLIndexedBufferRenderer( _gl, extensions, info, capabilities );
 
+		defaultAttachments = [ _gl.COLOR_ATTACHMENT0 ];
+		defaultBackAttachment = [ _gl.BACK ];
+		
 		info.programs = programCache.programs;
 
 		_this.capabilities = capabilities;
@@ -2525,10 +2535,12 @@ function WebGLRenderer( parameters ) {
 		}
 
 		var framebuffer = _framebuffer;
+		var renderTargetProperties; 
 		var isCube = false;
 
 		if ( renderTarget ) {
-
+			renderTargetProperties = properties.get( renderTarget );
+			
 			var __webglFramebuffer = properties.get( renderTarget ).__webglFramebuffer;
 
 			if ( renderTarget.isWebGLRenderTargetCube ) {
@@ -2562,6 +2574,23 @@ function WebGLRenderer( parameters ) {
 
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, framebuffer );
 			_currentFramebuffer = framebuffer;
+
+			if ( DrawBuffersEXT ) {
+
+				if ( renderTargetProperties && renderTargetProperties.__webglAttachments ) {
+
+					DrawBuffersEXT.drawBuffersWEBGL( renderTargetProperties.__webglAttachments );
+
+				} else if ( renderTarget ) {
+
+					DrawBuffersEXT.drawBuffersWEBGL( defaultAttachments );
+
+				} else {
+
+					DrawBuffersEXT.drawBuffersWEBGL( defaultBackAttachment );
+
+				}
+			}
 
 		}
 

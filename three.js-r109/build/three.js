@@ -3849,6 +3849,30 @@
 
 	} );
 
+	function WebGLMultiRenderTarget ( width, height, options ) {
+
+		WebGLRenderTarget.call( this, width, height, options );
+
+		this.attachments = [ this.texture ];
+	}
+	WebGLMultiRenderTarget.prototype = Object.assign( Object.create( WebGLRenderTarget.prototype ), {
+	    
+	    constructor: WebGLMultiRenderTarget,
+
+	    isWebGLMultiRenderTarget: true,
+	    
+	    copy: function ( source ) {
+	        
+	        WebGLRenderTarget.prototype.copy.call( this, source );
+
+	        this.attachments = source.attachments.map(function ( attachment ) {
+	            return attachment.clone();
+	        });
+
+	        return this;
+	    }
+	});
+
 	var _v1 = new Vector3();
 	var _m1 = new Matrix4();
 	var _zero = new Vector3( 0, 0, 0 );
@@ -21089,6 +21113,17 @@
 
 			}
 
+			if ( renderTarget.isWebGLMultiRenderTarget && renderTargetProperties.__webglAttachments ) {
+
+				for ( var i = 0; i < renderTarget.attachments.length; i ++ ) {
+
+					var attachmentProperties = properties.get( renderTarget.attachments[ i ] );
+					_gl.deleteTexture( attachmentProperties.__webglTexture );
+
+				}
+
+			}
+
 			if ( renderTarget.isWebGLRenderTargetCube ) {
 
 				for ( var i = 0; i < 6; i ++ ) {
@@ -21632,16 +21667,26 @@
 		// Render targets
 
 		// Setup storage for target texture and bind it to correct framebuffer
-		function setupFrameBufferTexture( framebuffer, renderTarget, attachment, textureTarget ) {
+		// function setupFrameBufferTexture( framebuffer, renderTarget, attachment, textureTarget ) {
 
-			var glFormat = utils.convert( renderTarget.texture.format );
-			var glType = utils.convert( renderTarget.texture.type );
+		// 	var glFormat = utils.convert( renderTarget.texture.format );
+		// 	var glType = utils.convert( renderTarget.texture.type );
+		// 	var glInternalFormat = getInternalFormat( glFormat, glType );
+		// 	state.texImage2D( textureTarget, 0, glInternalFormat, renderTarget.width, renderTarget.height, 0, glFormat, glType, null );
+		// 	_gl.bindFramebuffer( 36160, framebuffer );
+		// 	_gl.framebufferTexture2D( 36160, attachment, textureTarget, properties.get( renderTarget.texture ).__webglTexture, 0 );
+		// 	_gl.bindFramebuffer( 36160, null );
+
+		// }
+
+		function setupFrameBufferTexture ( framebuffer, width, height, texture, attachment, textureTarget ) {
+			var glFormat = utils.convert( texture.format );
+			var glType = utils.convert( texture.type );
 			var glInternalFormat = getInternalFormat( glFormat, glType );
-			state.texImage2D( textureTarget, 0, glInternalFormat, renderTarget.width, renderTarget.height, 0, glFormat, glType, null );
+			state.texImage2D( textureTarget, 0, glInternalFormat, width, height, 0, glFormat, glType, null );
 			_gl.bindFramebuffer( 36160, framebuffer );
-			_gl.framebufferTexture2D( 36160, attachment, textureTarget, properties.get( renderTarget.texture ).__webglTexture, 0 );
+			_gl.framebufferTexture2D( 36160, attachment, textureTarget, properties.get( texture ).__webglTexture, 0 );
 			_gl.bindFramebuffer( 36160, null );
-
 		}
 
 		// Setup storage for internal depth/stencil buffers and bind to correct framebuffer
@@ -21800,9 +21845,28 @@
 
 			renderTarget.addEventListener( 'dispose', onRenderTargetDispose );
 
-			textureProperties.__webglTexture = _gl.createTexture();
+			if ( renderTarget.isWebGLMultiRenderTarget ) {
 
-			info.memory.textures ++;
+				renderTargetProperties.__webglAttachmentTextures = [ ];
+				renderTargetProperties.__webglAttachments = [ ];
+
+				for ( var i = 0; i < renderTarget.attachments.length; i ++ ) {
+
+					var attachmentProperties = properties.get( renderTarget.attachments[ i ] );
+					attachmentProperties.__webglTexture = _gl.createTexture();
+					renderTargetProperties.__webglAttachments[ i ] = 36064 + i;
+
+					info.memory.textures ++;
+
+				}
+
+			} else {
+
+				textureProperties.__webglTexture = _gl.createTexture();
+
+				info.memory.textures ++;
+
+			}
 
 			var isCube = ( renderTarget.isWebGLRenderTargetCube === true );
 			var isMultisample = ( renderTarget.isWebGLMultisampleRenderTarget === true );
@@ -21914,8 +21978,9 @@
 
 				for ( var i = 0; i < 6; i ++ ) {
 
-					setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer[ i ], renderTarget, 36064, 34069 + i );
-
+					// setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer[ i ], renderTarget, 36064, 34069 + i );
+					
+					setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer[ i ], renderTarget.width, renderTarget.height, renderTarget.texture, 36064, 34069 + i );
 				}
 
 				if ( textureNeedsGenerateMipmaps( renderTarget.texture, supportsMips ) ) {
@@ -21926,16 +21991,43 @@
 
 				state.bindTexture( 34067, null );
 
-			} else if ( ! isMultiview ) {
+			} 
+			else if ( ! isMultiview ) {
 
-				state.bindTexture( 3553, textureProperties.__webglTexture );
-				setTextureParameters( 3553, renderTarget.texture, supportsMips );
-				setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer, renderTarget, 36064, 3553 );
+				if ( renderTarget.isWebGLMultiRenderTarget ) {
 
-				if ( textureNeedsGenerateMipmaps( renderTarget.texture, supportsMips ) ) {
+					for ( var i = 0; i < renderTarget.attachments.length; i ++ ) {
 
-					generateMipmap( 3553, renderTarget.texture, renderTarget.width, renderTarget.height );
+						var attachment = renderTarget.attachments[ i ];
+						var attachmentProperties = properties.get( attachment );
+						state.bindTexture( 3553, attachmentProperties.__webglTexture );
+						setTextureParameters( 3553, attachment, supportsMips );
+						setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer,
+							renderTarget.width,
+							renderTarget.height,
+							attachment,
+							36064 + i,
+							3553 );
 
+						if ( textureNeedsGenerateMipmaps( attachment, supportsMips ) ) {
+
+							generateMipmap( 3553, attachment, renderTarget.width, renderTarget.height );
+			
+						}
+
+					}
+
+				} else {
+
+					state.bindTexture( 3553, textureProperties.__webglTexture );
+					setTextureParameters( 3553, renderTarget.texture, supportsMips );
+					setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer, renderTarget, 36064, 3553 );
+
+					if ( textureNeedsGenerateMipmaps( renderTarget.texture, supportsMips ) ) {
+
+						generateMipmap( 3553, renderTarget.texture, renderTarget.width, renderTarget.height );
+
+					}
 				}
 
 				state.bindTexture( 3553, null );
@@ -21957,18 +22049,27 @@
 			var texture = renderTarget.texture;
 			var supportsMips = isPowerOfTwo( renderTarget ) || capabilities.isWebGL2;
 
-			if ( textureNeedsGenerateMipmaps( texture, supportsMips ) ) {
+			if ( renderTarget.isWebGLMultiRenderTarget ) {
+
+				for ( var i = 0; i < renderTarget.attachments.length; i ++ ) {
+					texture = properties.get( renderTarget.attachments[ i ] ).__webglTexture;
+					state.bindTexture( target, texture );
+					generateMipmap( target, texture, renderTarget.width, renderTarget.height );
+				}
+			}
+			else if ( textureNeedsGenerateMipmaps( texture, supportsMips ) ) {
 
 				var target = renderTarget.isWebGLRenderTargetCube ? 34067 : 3553;
 				var webglTexture = properties.get( texture ).__webglTexture;
 
 				state.bindTexture( target, webglTexture );
 				generateMipmap( target, texture, renderTarget.width, renderTarget.height );
-				state.bindTexture( target, null );
-
+			
 			}
-
+			state.bindTexture( target, null );
 		}
+
+		
 
 		function updateMultisampleRenderTarget( renderTarget ) {
 
@@ -23575,6 +23676,11 @@
 
 		var utils;
 
+		var DrawBuffersEXT;
+		var defaultAttachments;
+		var defaultBackAttachment;
+
+
 		function initGLContext() {
 
 			extensions = new WebGLExtensions( _gl );
@@ -23594,6 +23700,9 @@
 			}
 
 			extensions.get( 'OES_texture_float_linear' );
+			DrawBuffersEXT = extensions.get( 'WEBGL_draw_buffers' );
+
+			
 
 			utils = new WebGLUtils( _gl, extensions, capabilities );
 
@@ -23617,6 +23726,9 @@
 			bufferRenderer = new WebGLBufferRenderer( _gl, extensions, info, capabilities );
 			indexedBufferRenderer = new WebGLIndexedBufferRenderer( _gl, extensions, info, capabilities );
 
+			defaultAttachments = [ 36064 ];
+			defaultBackAttachment = [ 1029 ];
+			
 			info.programs = programCache.programs;
 
 			_this.capabilities = capabilities;
@@ -25847,10 +25959,12 @@
 			}
 
 			var framebuffer = _framebuffer;
+			var renderTargetProperties; 
 			var isCube = false;
 
 			if ( renderTarget ) {
-
+				renderTargetProperties = properties.get( renderTarget );
+				
 				var __webglFramebuffer = properties.get( renderTarget ).__webglFramebuffer;
 
 				if ( renderTarget.isWebGLRenderTargetCube ) {
@@ -25884,6 +25998,23 @@
 
 				_gl.bindFramebuffer( 36160, framebuffer );
 				_currentFramebuffer = framebuffer;
+
+				if ( DrawBuffersEXT ) {
+
+					if ( renderTargetProperties && renderTargetProperties.__webglAttachments ) {
+
+						DrawBuffersEXT.drawBuffersWEBGL( renderTargetProperties.__webglAttachments );
+
+					} else if ( renderTarget ) {
+
+						DrawBuffersEXT.drawBuffersWEBGL( defaultAttachments );
+
+					} else {
+
+						DrawBuffersEXT.drawBuffersWEBGL( defaultBackAttachment );
+
+					}
+				}
 
 			}
 
@@ -49603,6 +49734,7 @@
 	exports.VertexColors = VertexColors;
 	exports.VertexNormalsHelper = VertexNormalsHelper;
 	exports.VideoTexture = VideoTexture;
+	exports.WebGLMultiRenderTarget = WebGLMultiRenderTarget;
 	exports.WebGLMultisampleRenderTarget = WebGLMultisampleRenderTarget;
 	exports.WebGLRenderTarget = WebGLRenderTarget;
 	exports.WebGLRenderTargetCube = WebGLRenderTargetCube;
