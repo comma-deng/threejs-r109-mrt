@@ -1152,7 +1152,7 @@ function WebGLTextures( _gl, extensions, state, properties, capabilities, utils,
 
 				state.bindTexture( _gl.TEXTURE_2D, textureProperties.__webglTexture );
 				setTextureParameters( _gl.TEXTURE_2D, renderTarget.texture, supportsMips );
-				setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer, renderTarget, _gl.COLOR_ATTACHMENT0, _gl.TEXTURE_2D );
+				setupFrameBufferTexture( renderTargetProperties.__webglFramebuffer, renderTarget.width, renderTarget.height, renderTarget.texture, _gl.COLOR_ATTACHMENT0, _gl.TEXTURE_2D );
 
 				if ( textureNeedsGenerateMipmaps( renderTarget.texture, supportsMips ) ) {
 
@@ -1177,20 +1177,20 @@ function WebGLTextures( _gl, extensions, state, properties, capabilities, utils,
 
 	function updateRenderTargetMipmap( renderTarget ) {
 
-		var texture = renderTarget.texture;
+		var target = renderTarget.isWebGLRenderTargetCube ? _gl.TEXTURE_CUBE_MAP : _gl.TEXTURE_2D;
 		var supportsMips = isPowerOfTwo( renderTarget ) || capabilities.isWebGL2;
+		var texture = renderTarget.texture;
 
 		if ( renderTarget.isWebGLMultiRenderTarget ) {
 
 			for ( var i = 0; i < renderTarget.attachments.length; i ++ ) {
-				texture = properties.get( renderTarget.attachments[ i ] ).__webglTexture;
-				state.bindTexture( target, texture );
-				generateMipmap( target, texture, renderTarget.width, renderTarget.height );
+				let webgltexture = properties.get( renderTarget.attachments[ i ] ).__webglTexture;
+				state.bindTexture( target, webgltexture );
+				// generateMipmap( target, webgltexture, renderTarget.width, renderTarget.height );
 			}
 		}
 		else if ( textureNeedsGenerateMipmaps( texture, supportsMips ) ) {
 
-			var target = renderTarget.isWebGLRenderTargetCube ? _gl.TEXTURE_CUBE_MAP : _gl.TEXTURE_2D;
 			var webglTexture = properties.get( texture ).__webglTexture;
 
 			state.bindTexture( target, webglTexture );
